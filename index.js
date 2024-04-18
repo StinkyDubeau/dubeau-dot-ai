@@ -46,11 +46,11 @@ app.get("/", (req, res) => {
 });
 
 app.listen(port, () => {
-    main();
+    loadAstros();
     console.log(`Server running on port ${port}.`);
 });
 
-function main() {// Create a new client instance
+function loadAstros() {// Create a new client instance
 	// When the client is ready, run this code (only once).
 	// The distinction between `client: Client<boolean>` and `readyClient: Client<true>` is important for TypeScript developers.
 	// It makes some properties non-nullable.
@@ -75,16 +75,12 @@ function main() {// Create a new client instance
                 let astro = {};
 
                 message.attachments.forEach((attachment, index) => {
-                    console.log(message.content); // MESSAGE CONTENT
-                    message.content && (astro.title = message.content);
-
-                    console.log(attachment.attachment); //URL OF IMAGE
+                    astro.key = index;
+                    astro.title = message.content;
                     astro.image = attachment.url;
                     astro.timestamp = message.createdTimestamp;
                     astro.photographer = message.author.username;
                     astro.description = "This article has not been written yet.";
-
-
                 })
 
                 // Only add to list if there is an image
