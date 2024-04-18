@@ -70,7 +70,7 @@ function main() {// Create a new client instance
         }
         const response = await channel.fetch()
 
-        channel.messages.fetch({ limit: 5 }).then(messages => {
+        channel.messages.fetch({ limit: 100 }).then(messages => {
             messages.forEach((message, index) => {
                 let astro = {};
 
@@ -79,15 +79,16 @@ function main() {// Create a new client instance
                     message.content && (astro.title = message.content);
 
                     console.log(attachment.attachment); //URL OF IMAGE
-                    astro.image = attachment.attachment;
+                    astro.image = attachment.url;
                     astro.timestamp = message.createdTimestamp;
                     astro.photographer = message.author.username;
                     astro.description = "This article has not been written yet.";
 
-                    astros.push(astro);
+
                 })
 
-
+                // Only add to list if there is an image
+                astro.image && astros.push(astro);
             });
             // messages.forEach((message, index) => {
             //     console.log(messageasync);
