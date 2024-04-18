@@ -1,5 +1,6 @@
 import ollama from "ollama";
 import express from "express";
+import cors from "cors";
 import 'dotenv/config';
 import { Client, Events, GatewayIntentBits } from 'discord.js';
 import bodyParser from "body-parser";
@@ -10,6 +11,10 @@ const channelId = process.env.CHANNEL_ID;
 
 const app = express();
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent] });
+
+app.use(cors());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
 
 const astros = [
     // {
