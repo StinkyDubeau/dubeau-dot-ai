@@ -33,7 +33,7 @@ const astros = [
 ];
 
 app.get("/", (req, res) => {
-	res.send("<h1>Hello world.</h1>");
+	res.send(astros);
 });
 
 app.listen(port, () => {
@@ -61,14 +61,26 @@ function main() {// Create a new client instance
         }
         const response = await channel.fetch()
 
-        channel.messages.fetch({ limit: 3 }).then(messages => {
-            messages.forEach(message => {
-                console.log(message.content); // MESSAGE CONTENT
-                console.log(message.createdTimestamp); //ISO TIMESTAMP
+        channel.messages.fetch({ limit: 5 }).then(messages => {
+            messages.forEach((message, index) => {
+
+                let astro = {};
+
 
                 message.attachments.forEach((attachment, index) => {
+                    console.log(message.content); // MESSAGE CONTENT
+                    message.content && (astro.title = message.content);
+
+
                     console.log(attachment.attachment); //URL OF IMAGE
+                    astro.image = attachment.attachment;
+                    astro.timestamp = message.createdTimestamp;
+                    astro.description = "This article has not been written yet.";
+
+                    astros.push(astro);
                 })
+
+
             });
             // messages.forEach((message, index) => {
             //     console.log(messageasync);
