@@ -8,7 +8,7 @@ import download from "image-downloader";
 import path from "node:path";
 
 const model = "llava:13b";
-const prompt = "Describe this image of a Chevy Astro van. Make it sound majestic, like you're writing a passage of worship for the van. But don't overdo it, the description should be brief and focus on the scene as a whole rather than any particular feature of the van. ";
+const prompt = "Describe this image of a Chevy Astro van in 3 sentences or less. Make it sound majestic, like you're writing a passage of worship for the van. But don't overdo it, the description should be brief and focus on the scene as a whole rather than any particular feature of the van. ";
 const port = process.env.PORT;
 const channelId = process.env.CHANNEL_ID;
 
