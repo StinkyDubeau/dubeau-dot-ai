@@ -1,5 +1,7 @@
 .env
 
+images/image.jpg
+
 # Logs
 logs
 *.log
