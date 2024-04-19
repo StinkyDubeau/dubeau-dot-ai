@@ -16,9 +16,7 @@ app.use(cors());
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-const astros = [
-
-];
+const astros = [];
 
 app.get("/astros", (req, res) => {
 	res.send(astros);
@@ -27,6 +25,15 @@ app.get("/astros", (req, res) => {
 app.post("/ask", async (req, res, next) => {
     console.log(req.body);
     res.sendStatus(200);
+
+    res = await ollama.chat({
+        model: 'llava',
+        messages: [{
+            role: 'user',
+            content: 'Describe this image:',
+            images: [req.body.image]
+        }]
+    })
 	// res.send(await ask("Describe the Chevrolet Astro van."));
 });
 

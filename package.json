@@ -17,6 +17,7 @@
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "image-downloader": "^4.3.0",
     "nodemon": "^3.1.0",
     "ollama": "^0.5.0"
   }
