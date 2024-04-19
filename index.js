@@ -41,10 +41,12 @@ async function describe(url) {
             {
                 role: "user",
                 content: "Describe this image:",
-                image: image
+                images: [path.resolve("./img/image.jpg")]
             }
         ]
     });
+
+    console.log("Sending response...");
     return response;
 }
 
@@ -61,7 +63,7 @@ app.listen(port, () => {
 async function downloadImage(url) {
     return await download.image({
        url,
-       dest: path.dirname("/img") 
+       dest: path.resolve("./img/image.jpg") 
     });
 }
 
