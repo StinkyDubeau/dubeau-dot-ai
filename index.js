@@ -8,7 +8,7 @@ import download from "image-downloader";
 import path from "node:path";
 
 const model = "llava:13b";
-const prompt = "Describe this image of a Chevy Astro van. Make it sound majestic, like you're writing a passage of worship for the van. But don't overdo it, the description should be brief and focus on the scene as a whole rather than any particular feature of the van.";
+const prompt = "Describe this image of a Chevy Astro van. Make it sound majestic, like you're writing a passage of worship for the van. But don't overdo it, the description should be brief and focus on the scene as a whole rather than any particular feature of the van. ";
 const port = process.env.PORT;
 const channelId = process.env.CHANNEL_ID;
 
@@ -27,11 +27,13 @@ app.get("/astros", (req, res) => {
 
 app.post("/ask", async (req, res, next) => {
     console.log("Asking...");
+    console.log(req.body);
 
     res.send(await describe(req.body.image));
 });
 
 async function describe(url) {
+    console.log(`Image url: ${url}`);
     console.log("Downloading image...");
     const image = await downloadImage(url);
 
@@ -98,7 +100,6 @@ function loadAstros() {// Create a new client instance
                     astro.image = attachment.url;
                     astro.timestamp = message.createdTimestamp;
                     astro.photographer = message.author.username;
-                    astro.description = "This article has not been written yet.";
                 })
 
                 // Only add to list if there is an image
