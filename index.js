@@ -24,8 +24,10 @@ app.get("/astros", (req, res) => {
 	res.send(astros);
 });
 
-app.get("/ask", (req, res) => {
-	res.send(astros);
+app.post("/ask", async (req, res, next) => {
+    console.log(req.body);
+    res.sendStatus(200);
+	// res.send(await ask("Describe the Chevrolet Astro van."));
 });
 
 app.get("/", (req, res) => {
@@ -93,7 +95,7 @@ async function ask(prompt) {
             }
         ]
     });
-    return 
+    return response;
 }
 
 console.log("App running.");
