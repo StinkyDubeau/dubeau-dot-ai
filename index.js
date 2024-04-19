@@ -8,7 +8,7 @@ import download from "image-downloader";
 import path from "node:path";
 
 const model = "llava:13b";
-const prompt = "Describe this image of a Chevy Astro van in 3 sentences or less. Make it sound majestic, like you're writing a passage of worship for the van. But don't overdo it, the description should be brief and focus on the scene as a whole rather than any particular feature of the van. ";
+const prompt = "Describe this Chevrolet Astro Van in 2 sentences or less. Ensure your response highlights the beauty and mystique of the Astro.";
 const port = process.env.PORT;
 const channelId = process.env.CHANNEL_ID;
 
@@ -29,13 +29,13 @@ app.post("/ask", async (req, res, next) => {
     console.log("Asking...");
     console.log(req.body);
 
-    res.send(await describe(req.body.image));
+    res.send(await describe(req.body));
 });
 
-async function describe(url) {
-    console.log(`Image url: ${url}`);
+async function describe(astro) {
+    console.log(`Image url: ${astro.image}`);
     console.log("Downloading image...");
-    const image = await downloadImage(url);
+    const image = await downloadImage(astro.image);
 
     console.log("Generating response...");
     const response = await ollama.chat({
@@ -43,7 +43,7 @@ async function describe(url) {
         messages: [
             {
                 role: "user",
-                content: prompt,
+                content: `${prompt}. The image was captured by ${astro.photographer}, and they titled it ${astro.title}. Make sure to reference the photographer's name, but don't use their literal name. Make a nickname for them.`,
                 images: [path.resolve("./img/image.jpg")]
             }
         ]
