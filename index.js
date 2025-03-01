@@ -7,10 +7,12 @@ import bodyParser from "body-parser";
 import download from "image-downloader";
 import path from "node:path";
 
-const model = "llava:13b";
+const model = process.env.MODEL || "llava:13b";
 const prompt = "Describe this Chevrolet Astro Van in 2 sentences or less. Ensure your response highlights the beauty and mystique of the Astro.";
-const port = process.env.PORT;
-const channelId = process.env.CHANNEL_ID;
+const port = process.env.PORT || 3000;
+const discordChannelId = process.env.DISCORD_CHANNEL_ID;
+const discordApiToken = process.env.DISCORD_API_TOKEN;
+
 
 const app = express();
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent] });
@@ -55,11 +57,11 @@ async function describe(astro) {
 
 
 app.get("/", (req, res) => {
-	res.send("<p>Hello world</p>");
+	res.send("<p>This is dubeau-dot-ai web server.</p>");
 });
 
 app.listen(port, () => {
-    loadAstros();
+    discordApiToken && loadAstros(); // Only attempt to load astros if the discord token is set
     console.log(`Server running on port ${port}.`);
 });
 
@@ -70,7 +72,8 @@ async function downloadImage(url) {
     });
 }
 
-function loadAstros() {// Create a new client instance
+function loadAstros() {
+    // Create a new client instance
 	// When the client is ready, run this code (only once).
 	// The distinction between `client: Client<boolean>` and `readyClient: Client<true>` is important for TypeScript developers.
 	// It makes some properties non-nullable.
@@ -82,7 +85,7 @@ function loadAstros() {// Create a new client instance
         console.log(`Logged in as ${client.user.tag}`);
         
         // Replace 'channel_id' with the ID of the channel you want to iterate through
-        const channel = client.channels.cache.get(channelId);
+        const channel = client.channels.cache.get(discordChannelId);
         
         if (!channel) {
           console.error('Channel not found.');
