@@ -13,6 +13,7 @@ index.js currently (Febuary 2025) contains a discord scraper and an ollama insta
 ```
 PORT=XXXX, e.g. 3000
 MODEL=name of model, e.g. nous-hermes2
+MONGO_CONNECTION_STRING
 ```
 
 6. `npm run dev`

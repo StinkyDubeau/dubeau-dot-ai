@@ -6,6 +6,7 @@ import { Client, Events, GatewayIntentBits } from 'discord.js';
 import bodyParser from "body-parser";
 import download from "image-downloader";
 import path from "node:path";
+import { connectToDatabase, deleteDocument, readCollection, writeToCollection } from "./db.js";
 
 const model = process.env.MODEL || "llava:13b";
 const prompt = "Describe this Chevrolet Astro Van in 2 sentences or less. Ensure your response highlights the beauty and mystique of the Astro.";
@@ -22,9 +23,24 @@ app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
 const astros = [];
+const blogposts = [];
 
 app.get("/astros", (req, res) => {
 	res.send(astros);
+});
+
+app.get("/fetchBlogPosts", async (req, res) => {
+	res.send(await readCollection("blogposts"));
+});
+
+app.get("/sendBlogPost", async (req, res) => {
+    const blogPost = {
+        title: "My First Blog Post",
+        body: "This is my first blog post. I'm so excited to share my thoughts with the world!",
+        date: new Date(),
+    };
+
+    res.send(await writeToCollection("blogposts", blogPost));
 });
 
 app.post("/ask", async (req, res, next) => {
@@ -67,6 +83,7 @@ app.listen(port, () => {
     console.log(`Model: ${model}`);
     console.log(`Discord Channel ID: ${discordChannelId}`);
     console.log(`Discord API Token: ${discordApiToken}`);
+    connectToDatabase();
 });
 
 async function downloadImage(url) {
@@ -121,7 +138,5 @@ function loadAstros() {
 	// Log in to Discord with your client's token
 	client.login(process.env.DISCORD_TOKEN);
 }
-
-
 
 console.log("Starting up...");
