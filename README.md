@@ -16,3 +16,6 @@ MODEL=name of model, e.g. nous-hermes2
 ```
 
 6. `npm run dev`
+
+Extra Deployment Help:
+- MongoDB: https://www.mongodb.com/docs/manual/tutorial/install-mongodb-on-ubuntu/
