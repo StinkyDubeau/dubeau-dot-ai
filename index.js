@@ -62,7 +62,11 @@ app.get("/", (req, res) => {
 
 app.listen(port, () => {
     discordApiToken && loadAstros(); // Only attempt to load astros if the discord token is set
-    console.log(`Server running on port ${port}.`);
+    console.log(`Started dubeau-dot-ai!`);
+    console.log(`Port ${port}`);
+    console.log(`Model: ${model}`);
+    console.log(`Discord Channel ID: ${discordChannelId}`);
+    console.log(`Discord API Token: ${discordApiToken}`);
 });
 
 async function downloadImage(url) {
@@ -120,4 +124,4 @@ function loadAstros() {
 
 
 
-console.log("App running.");
+console.log("Starting up...");
