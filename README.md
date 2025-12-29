@@ -13,6 +13,11 @@ index.js currently (Febuary 2025) contains a discord scraper and an ollama insta
 ```
 PORT=XXXX, e.g. 3000
 MODEL=name of model, e.g. nous-hermes2
+
+Discord:
+DISCORD_TOKEN=["Client secret"]
+DISCORD_CHANNEL_ID=[Right click channel > Copy Channel ID]
+DISCORD_API_TOKEN=[Your token from the Bot page of https://discord.com/developers/applications/]
 ```
 
 6. `npm run dev`
