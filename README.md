@@ -1,68 +1,59 @@
 # dubeau-dot-ai
 
-This repo contains a simple server which is used by www.dubeau.org for some AI and scraping functions.
+Minimal Astro Sightings backend.
 
-index.js currently contains a Discord scraper and an Ollama instance which, combined, serve "Astro Sightings" on dubeau.org.
+## Run
 
-## Astro Sightings direction
-
-Astro Sightings should ingest the full Discord channel history, not only recent image uploads. The frontend should show Discord chat as a timeline and let users curate "sightings" by linking photos, caption messages, replies, and reactions together.
-
-Raw Discord timeline records and curated sighting records should remain separate:
-
-- raw timeline: Discord message ids, authors, content, timestamps, attachments, replies/references, and reactions.
-- curated sightings: user-selected groupings of timeline evidence, including one or more images, caption/supporting messages, bundled reactions, and optional notes/generated descriptions.
-
-The intended next API shape is:
-
-- `GET /astro/messages` — paginated normalized Discord timeline.
-- `POST /astro/sync` — authorized Discord history sync.
-- `GET /astro/sightings` — curated sightings.
-- `POST /astro/sightings` — create curated sighting.
-- `PATCH /astro/sightings/:id` — revise curation links/notes.
-
-The existing `/astros` endpoint remains the compatibility image feed until the timeline API is implemented.
-
-0. Host on debian (tested with 11 stable)
-1. Install node
-2. Install ollama (apt install ollama)
-3. Get a model (`ollama pull nous-hermes2:13b`)
-4. Install dependencies (`npm i`)
-5. Define environment variables:
-```
-PORT=XXXX, e.g. 3000
-CORS_ORIGIN=http://localhost:4173
-ADMIN_TOKEN=optional bearer token for POST endpoints
-MODEL=name of model, e.g. llava:13b
-
-Discord:
-DISCORD_TOKEN=[Your token from the Bot page of https://discord.com/developers/applications/]
-DISCORD_CHANNEL_ID=[Right click channel > Copy Channel ID]
-ASTROS_LIMIT=100
-ASTRO_SYNC_LIMIT=1000 (set to 0 to sync the entire channel)
-ASTRO_DATA_PATH=./data/astro-sightings.json
-ASTRO_SECRETS_PATH=./data/astro-secrets.json
+```bash
+npm install
+npm start
 ```
 
-Discord bot requirements:
+For live reload while editing the UI:
 
-- Bot invited to the target server.
-- `View Channel` and `Read Message History` permissions on the target channel.
-- Privileged Message Content Intent enabled.
-- Reaction intent/support when syncing reactions.
+```bash
+npm run dev
+```
 
-6. `npm run dev`
+That runs the backend on `3000` and Vite on `5173`.
 
-## Endpoints
+If you want Discord ingest, add these to `.env` or the environment:
 
-- `GET /health` — server status and Astro Sightings cache state.
-- `GET /admin/discord` — admin-token-protected masked Discord setup status.
-- `POST /admin/discord` — admin-token-protected local Discord token/channel setup.
-- `GET /astros` — cached Discord image uploads, newest first.
-- `POST /astros/refresh` — manually refresh the Discord cache.
-- `GET /astro/messages` — persisted normalized Discord timeline.
-- `POST /astro/sync` — sync Discord history into local durable storage.
-- `GET /astro/sightings` — curated sightings.
-- `POST /astro/sightings` — create a curated sighting.
-- `PATCH /astro/sightings/:id` — update a curated sighting.
-- `POST /ask` — generate an Ollama description for one Astro object.
+```bash
+DISCORD_TOKEN=...
+DISCORD_CHANNEL_ID=...
+ADMIN_TOKEN=...
+```
+
+That is enough for the app to run.
+
+## Use
+
+- Open `/` for the built-in control page.
+- Use `/admin/discord` to save Discord credentials if you did not set them in the environment.
+- Use `/astro/sync` to pull Discord history.
+- Use `/astro/messages` and `/astro/sightings` for data.
+
+## Files that persist
+
+- `ASTRO_DATA_PATH` defaults to `./data/astro-sightings.json`
+- `ASTRO_SECRETS_PATH` defaults to `./data/astro-secrets.json`
+
+## Debian service
+
+The fastest live setup is to run the built-in UI and API from this repo on the Debian box.
+
+```bash
+sudo loginctl enable-linger "$USER"
+mkdir -p ~/.config/systemd/user
+cp deploy/systemd/astro-sightings.service ~/.config/systemd/user/astro-sightings.service
+systemctl --user daemon-reload
+systemctl --user enable --now astro-sightings.service
+systemctl --user status astro-sightings.service
+```
+
+That serves the control room on `http://<debian-ip>:3000/`.
+
+## Optional template
+
+Copy [.env.example](/home/jaked/checkout/dubeau-dot-ai/.env.example) if you want a starter file.
