@@ -5,6 +5,7 @@ import cors from "cors";
 import { Client, GatewayIntentBits } from "discord.js";
 import download from "image-downloader";
 import express from "express";
+import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import ollama from "ollama";
 import path from "node:path";
 
@@ -15,6 +16,10 @@ const port = Number(process.env.PORT || 3000);
 const discordChannelId = process.env.DISCORD_CHANNEL_ID;
 const discordToken = process.env.DISCORD_TOKEN;
 const astrosLimit = Number(process.env.ASTROS_LIMIT || 100);
+const astroSyncLimit = Number(process.env.ASTRO_SYNC_LIMIT ?? 1000);
+const astroDataPath = path.resolve(
+    process.env.ASTRO_DATA_PATH || "./data/astro-sightings.json",
+);
 const adminToken = process.env.ADMIN_TOKEN;
 const corsOrigin = process.env.CORS_ORIGIN || "*";
 
@@ -24,13 +29,20 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildMessageReactions,
     ],
 });
 
 let astros = [];
+let astroMessages = [];
+let sightings = [];
 let lastRefresh = null;
 let lastRefreshError = null;
 let refreshInFlight = null;
+let timelineSyncInFlight = null;
+let lastTimelineSync = null;
+let lastTimelineSyncError = null;
+let writeStorageInFlight = Promise.resolve();
 
 app.use(cors({ origin: corsOrigin }));
 app.use(bodyParser.urlencoded({ extended: true }));
@@ -44,9 +56,14 @@ app.get("/health", (req, res) => {
     res.send({
         ok: true,
         astros: astros.length,
+        astroMessages: astroMessages.length,
+        sightings: sightings.length,
         discordConfigured: Boolean(discordToken && discordChannelId),
         lastRefresh,
         lastRefreshError,
+        lastTimelineSync,
+        lastTimelineSyncError,
+        astroDataPath,
     });
 });
 
@@ -59,6 +76,101 @@ app.post("/astros/refresh", requireAdminToken, async (req, res, next) => {
         const result = await refreshAstros();
 
         res.send(result);
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/astro/messages", (req, res) => {
+    const limit = clampNumber(req.query.limit, 1, 500, 100);
+    const before = Number(req.query.before || Number.POSITIVE_INFINITY);
+    const sort = req.query.sort === "desc" ? "desc" : "asc";
+    const sortedMessages = [...astroMessages].sort((a, b) =>
+        sort === "desc"
+            ? b.createdTimestamp - a.createdTimestamp
+            : a.createdTimestamp - b.createdTimestamp,
+    );
+    const filteredMessages = Number.isFinite(before)
+        ? sortedMessages.filter((message) => message.createdTimestamp < before)
+        : sortedMessages;
+    const messages = filteredMessages.slice(0, limit);
+
+    res.send({
+        messages,
+        nextBefore:
+            messages.length > 0
+                ? messages[messages.length - 1].createdTimestamp
+                : null,
+        total: astroMessages.length,
+    });
+});
+
+app.post("/astro/sync", requireAdminToken, async (req, res, next) => {
+    try {
+        const maxMessages = normalizeSyncLimit(
+            req.body?.maxMessages === undefined
+                ? astroSyncLimit
+                : req.body.maxMessages,
+        );
+        const result = await syncDiscordTimeline({ maxMessages });
+
+        res.send(result);
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/astro/sightings", (req, res) => {
+    res.send({ sightings });
+});
+
+app.post("/astro/sightings", requireAdminToken, async (req, res, next) => {
+    const sighting = {
+        id: req.body?.id || `sighting-${Date.now()}`,
+        title: req.body?.title || "",
+        attachmentIds: req.body?.attachmentIds || [],
+        messageIds: req.body?.messageIds || [],
+        reactionRefs: req.body?.reactionRefs || [],
+        notes: req.body?.notes || "",
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+    };
+
+    try {
+        sightings = [sighting, ...sightings];
+        await persistAstroData();
+
+        res.status(201).send({ sighting });
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.patch("/astro/sightings/:id", requireAdminToken, async (req, res, next) => {
+    const index = sightings.findIndex((sighting) => sighting.id === req.params.id);
+
+    if (index === -1) {
+        res.status(404).send({ ok: false, error: "Sighting not found" });
+        return;
+    }
+
+    const nextSighting = {
+        ...sightings[index],
+        ...req.body,
+        id: sightings[index].id,
+        updatedAt: new Date().toISOString(),
+    };
+
+    sightings = [
+        ...sightings.slice(0, index),
+        nextSighting,
+        ...sightings.slice(index + 1),
+    ];
+
+    try {
+        await persistAstroData();
+
+        res.send({ sighting: nextSighting });
     } catch (error) {
         next(error);
     }
@@ -80,8 +192,11 @@ app.use((error, req, res, next) => {
     });
 });
 
+await loadPersistedAstroData();
+
 app.listen(port, async () => {
     console.log(`Server running on port ${port}.`);
+    console.log(`Astro Sightings local storage: ${astroDataPath}`);
 
     if (!discordToken || !discordChannelId) {
         console.log(
@@ -93,11 +208,32 @@ app.listen(port, async () => {
     try {
         await loginDiscord();
         await refreshAstros();
+        await syncDiscordTimeline({ maxMessages: astrosLimit });
     } catch (error) {
         lastRefreshError = error.message;
         console.error("Initial Astro Sightings refresh failed:", error);
     }
 });
+
+function clampNumber(value, min, max, fallback) {
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) {
+        return fallback;
+    }
+
+    return Math.min(max, Math.max(min, number));
+}
+
+function normalizeSyncLimit(value) {
+    const number = Number(value);
+
+    if (!Number.isFinite(number) || number < 0) {
+        return astroSyncLimit;
+    }
+
+    return Math.floor(number);
+}
 
 function requireAdminToken(req, res, next) {
     if (!adminToken) {
@@ -142,11 +278,11 @@ async function refreshAstros() {
             lastRefresh = new Date().toISOString();
             lastRefreshError = null;
 
-            return {
+            return persistAstroData().then(() => ({
                 ok: true,
                 astros: astros.length,
                 lastRefresh,
-            };
+            }));
         })
         .catch((error) => {
             lastRefreshError = error.message;
@@ -160,15 +296,7 @@ async function refreshAstros() {
 }
 
 async function loadAstros() {
-    await loginDiscord();
-
-    const channel = await client.channels.fetch(discordChannelId);
-
-    if (!channel?.messages) {
-        throw new Error("Discord channel not found or is not message-readable.");
-    }
-
-    const messages = await channel.messages.fetch({ limit: astrosLimit });
+    const messages = await fetchDiscordMessages({ maxMessages: astrosLimit });
     const nextAstros = [];
 
     messages.forEach((message) => {
@@ -190,6 +318,211 @@ async function loadAstros() {
     nextAstros.sort((a, b) => b.timestamp - a.timestamp);
 
     return nextAstros;
+}
+
+async function syncDiscordTimeline({ maxMessages = astroSyncLimit } = {}) {
+    if (timelineSyncInFlight) {
+        return timelineSyncInFlight;
+    }
+
+    timelineSyncInFlight = fetchDiscordMessages({ maxMessages })
+        .then((messages) => {
+            astroMessages = messages
+                .map(normalizeDiscordMessage)
+                .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+            astros = deriveAstrosFromMessages(astroMessages);
+            lastTimelineSync = new Date().toISOString();
+            lastTimelineSyncError = null;
+            lastRefresh = lastTimelineSync;
+            lastRefreshError = null;
+
+            return persistAstroData().then(() => ({
+                ok: true,
+                messages: astroMessages.length,
+                astros: astros.length,
+                lastTimelineSync,
+                capped: maxMessages > 0,
+            }));
+        })
+        .catch((error) => {
+            lastTimelineSyncError = error.message;
+            throw error;
+        })
+        .finally(() => {
+            timelineSyncInFlight = null;
+        });
+
+    return timelineSyncInFlight;
+}
+
+async function fetchDiscordMessages({ maxMessages = astrosLimit } = {}) {
+    await loginDiscord();
+
+    const channel = await client.channels.fetch(discordChannelId);
+
+    if (!channel?.messages) {
+        throw new Error("Discord channel not found or is not message-readable.");
+    }
+
+    const messages = [];
+    let before;
+    const unlimited = maxMessages === 0;
+
+    while (unlimited || messages.length < maxMessages) {
+        const remaining = unlimited ? 100 : maxMessages - messages.length;
+        const batch = await channel.messages.fetch({
+            limit: Math.min(100, remaining),
+            ...(before ? { before } : {}),
+        });
+
+        if (batch.size === 0) {
+            break;
+        }
+
+        const batchMessages = [...batch.values()];
+
+        messages.push(...batchMessages);
+
+        const oldest = batchMessages.reduce((oldestMessage, message) =>
+            message.createdTimestamp < oldestMessage.createdTimestamp
+                ? message
+                : oldestMessage,
+        );
+
+        before = oldest.id;
+
+        if (batch.size < 100) {
+            break;
+        }
+    }
+
+    return messages;
+}
+
+function normalizeDiscordMessage(message) {
+    const attachments = [...message.attachments.values()].map(
+        (attachment, index) => ({
+            id: attachment.id || `${message.id}-${index}`,
+            messageId: message.id,
+            name: attachment.name,
+            url: attachment.url,
+            proxyUrl: attachment.proxyURL,
+            contentType: attachment.contentType,
+            size: attachment.size,
+            width: attachment.width,
+            height: attachment.height,
+            isImage: Boolean(attachment.contentType?.startsWith("image/")),
+        }),
+    );
+    const reactions = [...message.reactions.cache.values()].map((reaction) => ({
+        emoji: reaction.emoji.name,
+        emojiId: reaction.emoji.id,
+        emojiUrl: reaction.emoji.imageURL?.() || null,
+        count: reaction.count,
+    }));
+
+    return {
+        id: message.id,
+        channelId: message.channelId,
+        guildId: message.guildId,
+        url: message.url,
+        content: message.content,
+        createdAt: message.createdAt?.toISOString(),
+        createdTimestamp: message.createdTimestamp,
+        editedAt: message.editedAt?.toISOString() || null,
+        author: {
+            id: message.author?.id,
+            username: message.author?.username,
+            displayName: message.member?.displayName || message.author?.username,
+            avatarUrl: message.author?.displayAvatarURL?.() || null,
+            bot: Boolean(message.author?.bot),
+        },
+        reference: message.reference
+            ? {
+                  channelId: message.reference.channelId,
+                  guildId: message.reference.guildId,
+                  messageId: message.reference.messageId,
+              }
+            : null,
+        attachments,
+        reactions,
+    };
+}
+
+function deriveAstrosFromMessages(messages) {
+    const nextAstros = [];
+
+    messages.forEach((message) => {
+        message.attachments.forEach((attachment, index) => {
+            if (!attachment.isImage) {
+                return;
+            }
+
+            nextAstros.push({
+                key: `${message.id}-${attachment.id || index}`,
+                title: message.content,
+                image: attachment.url,
+                timestamp: message.createdTimestamp,
+                photographer: message.author.username,
+                messageId: message.id,
+                attachmentId: attachment.id,
+            });
+        });
+    });
+
+    nextAstros.sort((a, b) => b.timestamp - a.timestamp);
+
+    return nextAstros;
+}
+
+async function loadPersistedAstroData() {
+    try {
+        const stored = JSON.parse(await readFile(astroDataPath, "utf8"));
+
+        astroMessages = Array.isArray(stored.astroMessages)
+            ? stored.astroMessages
+            : [];
+        sightings = Array.isArray(stored.sightings) ? stored.sightings : [];
+        astros = Array.isArray(stored.astros)
+            ? stored.astros
+            : deriveAstrosFromMessages(astroMessages);
+        lastRefresh = stored.lastRefresh || null;
+        lastTimelineSync = stored.lastTimelineSync || null;
+
+        console.log(
+            `Loaded Astro Sightings storage: ${astroMessages.length} messages, ${astros.length} astros, ${sightings.length} sightings.`,
+        );
+    } catch (error) {
+        if (error.code === "ENOENT") {
+            return;
+        }
+
+        throw error;
+    }
+}
+
+async function persistAstroData() {
+    const payload = {
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        lastRefresh,
+        lastTimelineSync,
+        astros,
+        astroMessages,
+        sightings,
+    };
+
+    writeStorageInFlight = writeStorageInFlight
+        .catch(() => {})
+        .then(async () => {
+            await mkdir(path.dirname(astroDataPath), { recursive: true });
+
+            const tmpPath = `${astroDataPath}.tmp`;
+            await writeFile(tmpPath, JSON.stringify(payload, null, 2));
+            await rename(tmpPath, astroDataPath);
+        });
+
+    return writeStorageInFlight;
 }
 
 async function describe(astro) {

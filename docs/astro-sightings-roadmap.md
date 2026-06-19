@@ -19,7 +19,8 @@ The backend should not flatten Discord into a simple image list. It should keep 
 ## Next implementation steps
 
 1. Add durable storage.
-   - Local/dev default: SQLite via `ASTRO_DB_PATH`.
+   - Current local default: JSON file at `ASTRO_DATA_PATH` (`./data/astro-sightings.json`).
+   - Near-term upgrade: SQLite via `ASTRO_DB_PATH`.
    - Later production option: Postgres via `DATABASE_URL`.
 
 2. Normalize Discord timeline data.
