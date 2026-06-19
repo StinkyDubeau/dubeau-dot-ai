@@ -51,6 +51,7 @@ The backend should not flatten Discord into a simple image list. It should keep 
 
 - `DISCORD_TOKEN`
 - `DISCORD_CHANNEL_ID`
+- or save those through `POST /admin/discord` into local `ASTRO_SECRETS_PATH`
 - Bot invited to the target server/channel
 - `View Channel`
 - `Read Message History`

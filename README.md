@@ -41,6 +41,7 @@ DISCORD_CHANNEL_ID=[Right click channel > Copy Channel ID]
 ASTROS_LIMIT=100
 ASTRO_SYNC_LIMIT=1000 (set to 0 to sync the entire channel)
 ASTRO_DATA_PATH=./data/astro-sightings.json
+ASTRO_SECRETS_PATH=./data/astro-secrets.json
 ```
 
 Discord bot requirements:
@@ -55,6 +56,8 @@ Discord bot requirements:
 ## Endpoints
 
 - `GET /health` — server status and Astro Sightings cache state.
+- `GET /admin/discord` — admin-token-protected masked Discord setup status.
+- `POST /admin/discord` — admin-token-protected local Discord token/channel setup.
 - `GET /astros` — cached Discord image uploads, newest first.
 - `POST /astros/refresh` — manually refresh the Discord cache.
 - `GET /astro/messages` — persisted normalized Discord timeline.

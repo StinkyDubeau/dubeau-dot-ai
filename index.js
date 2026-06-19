@@ -5,7 +5,7 @@ import cors from "cors";
 import { Client, GatewayIntentBits } from "discord.js";
 import download from "image-downloader";
 import express from "express";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import ollama from "ollama";
 import path from "node:path";
 
@@ -13,25 +13,24 @@ const model = process.env.MODEL || "llava:13b";
 const prompt =
     "Describe this Chevrolet Astro Van in 2 sentences or less. Ensure your response highlights the beauty and mystique of the Astro.";
 const port = Number(process.env.PORT || 3000);
-const discordChannelId = process.env.DISCORD_CHANNEL_ID;
-const discordToken = process.env.DISCORD_TOKEN;
 const astrosLimit = Number(process.env.ASTROS_LIMIT || 100);
 const astroSyncLimit = Number(process.env.ASTRO_SYNC_LIMIT ?? 1000);
 const astroDataPath = path.resolve(
     process.env.ASTRO_DATA_PATH || "./data/astro-sightings.json",
 );
+const astroSecretsPath = path.resolve(
+    process.env.ASTRO_SECRETS_PATH || "./data/astro-secrets.json",
+);
 const adminToken = process.env.ADMIN_TOKEN;
 const corsOrigin = process.env.CORS_ORIGIN || "*";
 
 const app = express();
-const client = new Client({
-    intents: [
-        GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildMessageReactions,
-    ],
-});
+let client = createDiscordClient();
+let activeDiscordToken = null;
+let discordConfig = {
+    token: process.env.DISCORD_TOKEN || "",
+    channelId: process.env.DISCORD_CHANNEL_ID || "",
+};
 
 let astros = [];
 let astroMessages = [];
@@ -58,7 +57,7 @@ app.get("/health", (req, res) => {
         astros: astros.length,
         astroMessages: astroMessages.length,
         sightings: sightings.length,
-        discordConfigured: Boolean(discordToken && discordChannelId),
+        discordConfigured: hasDiscordConfig(),
         lastRefresh,
         lastRefreshError,
         lastTimelineSync,
@@ -76,6 +75,31 @@ app.post("/astros/refresh", requireAdminToken, async (req, res, next) => {
         const result = await refreshAstros();
 
         res.send(result);
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.get("/admin/discord", requireConfiguredAdminToken, (req, res) => {
+    res.send(getDiscordConfigStatus());
+});
+
+app.post("/admin/discord", requireConfiguredAdminToken, async (req, res, next) => {
+    try {
+        const token = String(req.body?.discordToken || "").trim();
+        const channelId = String(req.body?.discordChannelId || "").trim();
+
+        if (!token || !channelId) {
+            res.status(400).send({
+                ok: false,
+                error: "discordToken and discordChannelId are required.",
+            });
+            return;
+        }
+
+        await saveDiscordConfig({ token, channelId });
+
+        res.send(getDiscordConfigStatus());
     } catch (error) {
         next(error);
     }
@@ -192,15 +216,17 @@ app.use((error, req, res, next) => {
     });
 });
 
+await loadPersistedDiscordConfig();
 await loadPersistedAstroData();
 
 app.listen(port, async () => {
     console.log(`Server running on port ${port}.`);
     console.log(`Astro Sightings local storage: ${astroDataPath}`);
+    console.log(`Astro Sightings local secrets: ${astroSecretsPath}`);
 
-    if (!discordToken || !discordChannelId) {
+    if (!hasDiscordConfig()) {
         console.log(
-            "Discord scraping disabled. Set DISCORD_TOKEN and DISCORD_CHANNEL_ID to load Astro Sightings.",
+            "Discord scraping disabled. Set DISCORD_TOKEN/DISCORD_CHANNEL_ID or use POST /admin/discord.",
         );
         return;
     }
@@ -235,6 +261,52 @@ function normalizeSyncLimit(value) {
     return Math.floor(number);
 }
 
+function createDiscordClient() {
+    return new Client({
+        intents: [
+            GatewayIntentBits.Guilds,
+            GatewayIntentBits.GuildMessages,
+            GatewayIntentBits.MessageContent,
+            GatewayIntentBits.GuildMessageReactions,
+        ],
+    });
+}
+
+function getDiscordToken() {
+    return discordConfig.token;
+}
+
+function getDiscordChannelId() {
+    return discordConfig.channelId;
+}
+
+function hasDiscordConfig() {
+    return Boolean(getDiscordToken() && getDiscordChannelId());
+}
+
+function maskSecret(value) {
+    if (!value) {
+        return null;
+    }
+
+    if (value.length <= 8) {
+        return "••••";
+    }
+
+    return `${value.slice(0, 4)}…${value.slice(-4)}`;
+}
+
+function getDiscordConfigStatus() {
+    return {
+        ok: true,
+        configured: hasDiscordConfig(),
+        discordChannelId: getDiscordChannelId() || null,
+        discordTokenMasked: maskSecret(getDiscordToken()),
+        adminTokenConfigured: Boolean(adminToken),
+        astroSecretsPath,
+    };
+}
+
 function requireAdminToken(req, res, next) {
     if (!adminToken) {
         return next();
@@ -249,12 +321,37 @@ function requireAdminToken(req, res, next) {
     res.status(401).send({ ok: false, error: "Unauthorized" });
 }
 
-async function loginDiscord() {
-    if (client.isReady()) {
+function requireConfiguredAdminToken(req, res, next) {
+    if (!adminToken) {
+        res.status(403).send({
+            ok: false,
+            error: "Set ADMIN_TOKEN on the server before saving Discord credentials.",
+        });
         return;
     }
 
-    await client.login(discordToken);
+    requireAdminToken(req, res, next);
+}
+
+async function loginDiscord() {
+    const token = getDiscordToken();
+
+    if (!token) {
+        throw new Error("Discord token is not configured.");
+    }
+
+    if (client.isReady() && activeDiscordToken === token) {
+        return;
+    }
+
+    if (client.isReady()) {
+        client.destroy();
+        client = createDiscordClient();
+        activeDiscordToken = null;
+    }
+
+    await client.login(token);
+    activeDiscordToken = token;
     await new Promise((resolve) => {
         if (client.isReady()) {
             resolve();
@@ -356,9 +453,13 @@ async function syncDiscordTimeline({ maxMessages = astroSyncLimit } = {}) {
 }
 
 async function fetchDiscordMessages({ maxMessages = astrosLimit } = {}) {
+    if (!hasDiscordConfig()) {
+        throw new Error("Discord token and channel id are not configured.");
+    }
+
     await loginDiscord();
 
-    const channel = await client.channels.fetch(discordChannelId);
+    const channel = await client.channels.fetch(getDiscordChannelId());
 
     if (!channel?.messages) {
         throw new Error("Discord channel not found or is not message-readable.");
@@ -473,6 +574,63 @@ function deriveAstrosFromMessages(messages) {
     nextAstros.sort((a, b) => b.timestamp - a.timestamp);
 
     return nextAstros;
+}
+
+async function loadPersistedDiscordConfig() {
+    try {
+        const stored = JSON.parse(await readFile(astroSecretsPath, "utf8"));
+
+        discordConfig = {
+            token: process.env.DISCORD_TOKEN || stored.discordToken || "",
+            channelId:
+                process.env.DISCORD_CHANNEL_ID ||
+                stored.discordChannelId ||
+                "",
+        };
+
+        console.log(
+            `Loaded Discord config: channel ${getDiscordChannelId() || "(none)"}, token ${getDiscordToken() ? "configured" : "missing"}.`,
+        );
+    } catch (error) {
+        if (error.code === "ENOENT") {
+            return;
+        }
+
+        throw error;
+    }
+}
+
+async function saveDiscordConfig({ token, channelId }) {
+    const tokenChanged = token !== getDiscordToken();
+
+    discordConfig = { token, channelId };
+
+    await mkdir(path.dirname(astroSecretsPath), { recursive: true });
+
+    const tmpPath = `${astroSecretsPath}.tmp`;
+    await writeFile(
+        tmpPath,
+        JSON.stringify(
+            {
+                version: 1,
+                updatedAt: new Date().toISOString(),
+                discordToken: token,
+                discordChannelId: channelId,
+            },
+            null,
+            2,
+        ),
+        { mode: 0o600 },
+    );
+    await chmod(tmpPath, 0o600);
+    await rename(tmpPath, astroSecretsPath);
+    await chmod(astroSecretsPath, 0o600);
+
+    if (tokenChanged && client.isReady()) {
+        client.destroy();
+        client = createDiscordClient();
+        activeDiscordToken = null;
+    }
 }
 
 async function loadPersistedAstroData() {
