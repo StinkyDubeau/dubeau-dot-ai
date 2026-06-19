@@ -94,6 +94,23 @@
       color: var(--muted);
     }
 
+    .warning {
+      border: 1px solid rgba(255, 124, 138, 0.45);
+      background:
+        linear-gradient(135deg, rgba(255, 124, 138, 0.18), rgba(255, 196, 107, 0.12)),
+        rgba(28, 10, 13, 0.92);
+    }
+
+    .warning h2,
+    .warning strong {
+      color: #ffd3d8;
+    }
+
+    .warning-copy {
+      color: #ffdede;
+      line-height: 1.5;
+    }
+
     .stats {
       display: grid;
       grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -251,6 +268,16 @@
           <div class="stat"><div class="label">Astros</div><div class="value" id="stat-astros">-</div></div>
           <div class="stat"><div class="label">Sightings</div><div class="value" id="stat-sightings">-</div></div>
           <div class="stat"><div class="label">Discord</div><div class="value" id="stat-discord">-</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card warning" style="margin-top:16px;">
+      <div class="inner">
+        <h2>Experimental Mod/Admin UI</h2>
+        <div class="warning-copy">
+          <strong>Warning:</strong> this page writes to the live Astro Sightings server on this Debian machine.
+          Saving Discord credentials, syncing history, or using the admin token changes the running service and its persisted local data immediately.
         </div>
       </div>
     </section>
