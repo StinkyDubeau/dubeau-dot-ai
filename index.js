@@ -1,123 +1,220 @@
-import ollama from "ollama";
-import express from "express";
-import cors from "cors";
-import 'dotenv/config';
-import { Client, Events, GatewayIntentBits } from 'discord.js';
+import "dotenv/config";
+
 import bodyParser from "body-parser";
+import cors from "cors";
+import { Client, GatewayIntentBits } from "discord.js";
 import download from "image-downloader";
+import express from "express";
+import ollama from "ollama";
 import path from "node:path";
 
 const model = process.env.MODEL || "llava:13b";
-const prompt = "Describe this Chevrolet Astro Van in 2 sentences or less. Ensure your response highlights the beauty and mystique of the Astro.";
-const port = process.env.PORT || 3000;
+const prompt =
+    "Describe this Chevrolet Astro Van in 2 sentences or less. Ensure your response highlights the beauty and mystique of the Astro.";
+const port = Number(process.env.PORT || 3000);
 const discordChannelId = process.env.DISCORD_CHANNEL_ID;
-const discordApiToken = process.env.DISCORD_API_TOKEN;
-
+const discordToken = process.env.DISCORD_TOKEN;
+const astrosLimit = Number(process.env.ASTROS_LIMIT || 100);
+const adminToken = process.env.ADMIN_TOKEN;
+const corsOrigin = process.env.CORS_ORIGIN || "*";
 
 const app = express();
-const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent] });
+const client = new Client({
+    intents: [
+        GatewayIntentBits.Guilds,
+        GatewayIntentBits.GuildMessages,
+        GatewayIntentBits.MessageContent,
+    ],
+});
 
-app.use(cors());
+let astros = [];
+let lastRefresh = null;
+let lastRefreshError = null;
+let refreshInFlight = null;
+
+app.use(cors({ origin: corsOrigin }));
 app.use(bodyParser.urlencoded({ extended: true }));
 app.use(bodyParser.json());
 
-const astros = [];
+app.get("/", (req, res) => {
+    res.send("<p>This is dubeau-dot-ai web server.</p>");
+});
+
+app.get("/health", (req, res) => {
+    res.send({
+        ok: true,
+        astros: astros.length,
+        discordConfigured: Boolean(discordToken && discordChannelId),
+        lastRefresh,
+        lastRefreshError,
+    });
+});
 
 app.get("/astros", (req, res) => {
-	res.send(astros);
+    res.send(astros);
 });
 
-app.post("/ask", async (req, res, next) => {
-    console.log("Asking...");
-    console.log(req.body);
+app.post("/astros/refresh", requireAdminToken, async (req, res, next) => {
+    try {
+        const result = await refreshAstros();
 
-    res.send(await describe(req.body));
+        res.send(result);
+    } catch (error) {
+        next(error);
+    }
 });
+
+app.post("/ask", requireAdminToken, async (req, res, next) => {
+    try {
+        res.send(await describe(req.body));
+    } catch (error) {
+        next(error);
+    }
+});
+
+app.use((error, req, res, next) => {
+    console.error(error);
+    res.status(500).send({
+        ok: false,
+        error: error.message || "Internal server error",
+    });
+});
+
+app.listen(port, async () => {
+    console.log(`Server running on port ${port}.`);
+
+    if (!discordToken || !discordChannelId) {
+        console.log(
+            "Discord scraping disabled. Set DISCORD_TOKEN and DISCORD_CHANNEL_ID to load Astro Sightings.",
+        );
+        return;
+    }
+
+    try {
+        await loginDiscord();
+        await refreshAstros();
+    } catch (error) {
+        lastRefreshError = error.message;
+        console.error("Initial Astro Sightings refresh failed:", error);
+    }
+});
+
+function requireAdminToken(req, res, next) {
+    if (!adminToken) {
+        return next();
+    }
+
+    const token = req.get("authorization")?.replace(/^Bearer\s+/i, "");
+
+    if (token === adminToken) {
+        return next();
+    }
+
+    res.status(401).send({ ok: false, error: "Unauthorized" });
+}
+
+async function loginDiscord() {
+    if (client.isReady()) {
+        return;
+    }
+
+    await client.login(discordToken);
+    await new Promise((resolve) => {
+        if (client.isReady()) {
+            resolve();
+            return;
+        }
+
+        client.once("ready", resolve);
+    });
+
+    console.log(`Logged in as ${client.user.tag}`);
+}
+
+async function refreshAstros() {
+    if (refreshInFlight) {
+        return refreshInFlight;
+    }
+
+    refreshInFlight = loadAstros()
+        .then((nextAstros) => {
+            astros = nextAstros;
+            lastRefresh = new Date().toISOString();
+            lastRefreshError = null;
+
+            return {
+                ok: true,
+                astros: astros.length,
+                lastRefresh,
+            };
+        })
+        .catch((error) => {
+            lastRefreshError = error.message;
+            throw error;
+        })
+        .finally(() => {
+            refreshInFlight = null;
+        });
+
+    return refreshInFlight;
+}
+
+async function loadAstros() {
+    await loginDiscord();
+
+    const channel = await client.channels.fetch(discordChannelId);
+
+    if (!channel?.messages) {
+        throw new Error("Discord channel not found or is not message-readable.");
+    }
+
+    const messages = await channel.messages.fetch({ limit: astrosLimit });
+    const nextAstros = [];
+
+    messages.forEach((message) => {
+        message.attachments.forEach((attachment, index) => {
+            if (!attachment.contentType?.startsWith("image/")) {
+                return;
+            }
+
+            nextAstros.push({
+                key: `${message.id}-${attachment.id || index}`,
+                title: message.content,
+                image: attachment.url,
+                timestamp: message.createdTimestamp,
+                photographer: message.author.username,
+            });
+        });
+    });
+
+    nextAstros.sort((a, b) => b.timestamp - a.timestamp);
+
+    return nextAstros;
+}
 
 async function describe(astro) {
     console.log(`Image url: ${astro.image}`);
     console.log("Downloading image...");
-    const image = await downloadImage(astro.image);
+    await downloadImage(astro.image);
 
     console.log("Generating response...");
-    const response = await ollama.chat({
-        model: model,
+    return await ollama.chat({
+        model,
         messages: [
             {
                 role: "user",
                 content: `${prompt}. The image was captured by ${astro.photographer}, and they titled it ${astro.title}. Make sure to reference the photographer's name, but don't use their literal name. Make a nickname for them.`,
-                images: [path.resolve("./img/image.jpg")]
-            }
-        ]
+                images: [path.resolve("./img/image.jpg")],
+            },
+        ],
     });
-
-    console.log("Sending response...");
-    return response;
 }
-
-
-app.get("/", (req, res) => {
-	res.send("<p>This is dubeau-dot-ai web server.</p>");
-});
-
-app.listen(port, () => {
-    discordApiToken && loadAstros(); // Only attempt to load astros if the discord token is set
-    console.log(`Server running on port ${port}.`);
-});
 
 async function downloadImage(url) {
     return await download.image({
-       url,
-       dest: path.resolve("./img/image.jpg") 
+        url,
+        dest: path.resolve("./img/image.jpg"),
     });
 }
-
-function loadAstros() {
-    // Create a new client instance
-	// When the client is ready, run this code (only once).
-	// The distinction between `client: Client<boolean>` and `readyClient: Client<true>` is important for TypeScript developers.
-	// It makes some properties non-nullable.
-	// client.once(Events.ClientReady, readyClient => {
-	// 	console.log(`Ready! Logged in as ${readyClient.user.tag}`);
-	// });
-
-    client.on('ready', async() => {
-        console.log(`Logged in as ${client.user.tag}`);
-        
-        // Replace 'channel_id' with the ID of the channel you want to iterate through
-        const channel = client.channels.cache.get(discordChannelId);
-        
-        if (!channel) {
-          console.error('Channel not found.');
-          return;
-        }
-        const response = await channel.fetch()
-
-        channel.messages.fetch({ limit: 100 }).then(messages => {
-            messages.forEach((message, index) => {
-                let astro = {};
-
-                message.attachments.forEach((attachment, index) => {
-                    astro.key = index;
-                    astro.title = message.content;
-                    astro.image = attachment.url;
-                    astro.timestamp = message.createdTimestamp;
-                    astro.photographer = message.author.username;
-                })
-
-                // Only add to list if there is an image
-                astro.image && astros.push(astro);
-            });
-            // messages.forEach((message, index) => {
-            //     console.log(messageasync);
-            // })
-        })
-      });
-
-	// Log in to Discord with your client's token
-	client.login(process.env.DISCORD_TOKEN);
-}
-
-
 
 console.log("App running.");
