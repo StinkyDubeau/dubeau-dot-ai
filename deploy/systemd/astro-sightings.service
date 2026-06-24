@@ -1,0 +1,17 @@
+[Unit]
+Description=Astro Sightings control room
+After=network-online.target ollama.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/jaked/checkout/dubeau-dot-ai
+ExecStart=/usr/bin/npm start
+Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
+Environment=PORT=3000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

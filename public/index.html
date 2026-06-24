@@ -1,0 +1,508 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Astro Sightings Control Room</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #071018;
+      --panel: rgba(11, 19, 29, 0.86);
+      --panel-strong: rgba(15, 25, 39, 0.96);
+      --border: rgba(165, 185, 211, 0.18);
+      --text: #e9f1fb;
+      --muted: #9ab0c8;
+      --accent: #5ed3ff;
+      --accent-2: #7cffa7;
+      --danger: #ff7c8a;
+      --shadow: 0 28px 70px rgba(0, 0, 0, 0.35);
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at top left, rgba(94, 211, 255, 0.18), transparent 34%),
+        radial-gradient(circle at top right, rgba(124, 255, 167, 0.12), transparent 28%),
+        linear-gradient(180deg, #050a11 0%, #071018 40%, #05070d 100%);
+      color: var(--text);
+      min-height: 100vh;
+    }
+
+    .shell {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    header {
+      display: flex;
+      gap: 16px;
+      align-items: flex-end;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3.5rem);
+      letter-spacing: -0.04em;
+      line-height: 0.95;
+    }
+
+    .subtitle {
+      max-width: 64ch;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .pill {
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.03);
+      white-space: nowrap;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap: 16px;
+    }
+
+    .card {
+      grid-column: span 12;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 22px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .card .inner {
+      padding: 18px;
+    }
+
+    .card h2 {
+      margin: 0 0 10px;
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+    }
+
+    .warning {
+      border: 1px solid rgba(255, 124, 138, 0.45);
+      background:
+        linear-gradient(135deg, rgba(255, 124, 138, 0.18), rgba(255, 196, 107, 0.12)),
+        rgba(28, 10, 13, 0.92);
+    }
+
+    .warning h2,
+    .warning strong {
+      color: #ffd3d8;
+    }
+
+    .warning-copy {
+      color: #ffdede;
+      line-height: 1.5;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat {
+      background: var(--panel-strong);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px;
+    }
+
+    .stat .label {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+    }
+
+    .stat .value {
+      font-size: 1.4rem;
+      font-weight: 700;
+    }
+
+    .split {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    label {
+      display: block;
+      font-size: 0.88rem;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    input, textarea, button {
+      font: inherit;
+    }
+
+    input, textarea {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+      background: rgba(3, 8, 14, 0.75);
+      color: var(--text);
+      padding: 12px 14px;
+      outline: none;
+    }
+
+    textarea {
+      min-height: 100px;
+      resize: vertical;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    button {
+      border: 1px solid var(--border);
+      background: rgba(94, 211, 255, 0.14);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 10px 14px;
+      cursor: pointer;
+    }
+
+    button.secondary {
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    button.danger {
+      background: rgba(255, 124, 138, 0.15);
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #dbe9f8;
+      background: rgba(3, 8, 14, 0.7);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px;
+      min-height: 120px;
+      max-height: 420px;
+      overflow: auto;
+    }
+
+    .muted { color: var(--muted); }
+    .ok { color: var(--accent-2); }
+    .bad { color: var(--danger); }
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .item {
+      padding: 14px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      background: rgba(4, 9, 15, 0.7);
+    }
+
+    .item h3 {
+      margin: 0 0 4px;
+      font-size: 0.98rem;
+    }
+
+    .item .meta {
+      color: var(--muted);
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+    }
+
+    .item .content {
+      white-space: pre-wrap;
+      color: #dbe9f8;
+    }
+
+    @media (max-width: 920px) {
+      .stats, .split, .row { grid-template-columns: 1fr; }
+      header { align-items: flex-start; flex-direction: column; }
+      .pill { white-space: normal; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header>
+      <div>
+        <h1>Astro Sightings</h1>
+        <div class="subtitle">One page. One server. Minimal setup.</div>
+      </div>
+      <div class="pill" id="connection-pill">Loading bootstrap…</div>
+    </header>
+
+    <section class="card">
+      <div class="inner">
+        <h2>Status</h2>
+        <div class="stats">
+          <div class="stat"><div class="label">Messages</div><div class="value" id="stat-messages">-</div></div>
+          <div class="stat"><div class="label">Astros</div><div class="value" id="stat-astros">-</div></div>
+          <div class="stat"><div class="label">Sightings</div><div class="value" id="stat-sightings">-</div></div>
+          <div class="stat"><div class="label">Discord</div><div class="value" id="stat-discord">-</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card warning" style="margin-top:16px;">
+      <div class="inner">
+        <h2>Experimental Mod/Admin UI</h2>
+        <div class="warning-copy">
+          <strong>Warning:</strong> this page writes to the live Astro Sightings server on this Debian machine.
+          Saving Discord credentials, syncing history, or using the admin token changes the running service and its persisted local data immediately.
+        </div>
+      </div>
+    </section>
+
+    <section class="grid" style="margin-top:16px;">
+      <section class="card" style="grid-column: span 5;">
+        <div class="inner">
+          <h2>Admin Token</h2>
+          <label for="admin-token">Bearer token for POST endpoints</label>
+          <input id="admin-token" placeholder="ADMIN_TOKEN" autocomplete="off" />
+          <div class="actions">
+            <button id="save-token">Save</button>
+            <button class="secondary" id="clear-token">Clear</button>
+          </div>
+          <div class="muted" style="margin-top:10px;">Stored in this browser only.</div>
+        </div>
+      </section>
+
+      <section class="card" style="grid-column: span 7;">
+        <div class="inner">
+          <h2>Discord Setup</h2>
+          <div class="row">
+            <div>
+              <label for="discord-token">Discord bot token</label>
+              <input id="discord-token" placeholder="Bot token" autocomplete="off" />
+            </div>
+            <div>
+              <label for="discord-channel">Discord channel ID</label>
+              <input id="discord-channel" placeholder="Channel ID" autocomplete="off" />
+            </div>
+          </div>
+          <div class="actions">
+            <button id="save-discord">Save Discord Config</button>
+            <button class="secondary" id="load-discord">Reload Status</button>
+            <button class="danger" id="full-sync">Full Sync</button>
+          </div>
+          <div class="muted" style="margin-top:10px;">Uses the server on the same origin.</div>
+        </div>
+      </section>
+
+      <section class="card" style="grid-column: span 4;">
+        <div class="inner">
+          <h2>Actions</h2>
+          <div class="actions">
+            <button id="refresh-astros">Refresh Astros</button>
+            <button id="load-messages" class="secondary">Load Messages</button>
+            <button id="load-sightings" class="secondary">Load Sightings</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="card" style="grid-column: span 8;">
+        <div class="inner">
+          <h2>Bootstrap</h2>
+          <pre id="bootstrap-json">Waiting for bootstrap…</pre>
+        </div>
+      </section>
+
+      <section class="card" style="grid-column: span 12;">
+        <div class="inner">
+          <h2>Timeline</h2>
+          <div id="messages" class="list"></div>
+        </div>
+      </section>
+
+      <section class="card" style="grid-column: span 12;">
+        <div class="inner">
+          <h2>Sightings</h2>
+          <div id="sightings" class="list"></div>
+        </div>
+      </section>
+
+      <section class="card" style="grid-column: span 12;">
+        <div class="inner">
+          <h2>Server Response</h2>
+          <pre id="output">Idle.</pre>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      bootstrap: null,
+      adminToken: localStorage.getItem('astro-admin-token') || '',
+    };
+
+    const $ = (id) => document.getElementById(id);
+
+    $('admin-token').value = state.adminToken;
+    $('save-token').addEventListener('click', () => {
+      state.adminToken = $('admin-token').value.trim();
+      localStorage.setItem('astro-admin-token', state.adminToken);
+      setOutput('Saved admin token locally.');
+    });
+    $('clear-token').addEventListener('click', () => {
+      state.adminToken = '';
+      localStorage.removeItem('astro-admin-token');
+      $('admin-token').value = '';
+      setOutput('Cleared admin token.');
+    });
+
+    $('save-discord').addEventListener('click', () => postJson('/admin/discord', {
+      discordToken: $('discord-token').value.trim(),
+      discordChannelId: $('discord-channel').value.trim(),
+    }, true));
+
+    $('refresh-astros').addEventListener('click', () => postJson('/astros/refresh', {}, true));
+    $('full-sync').addEventListener('click', () => postJson('/astro/sync', { maxMessages: 0 }, true));
+    $('load-messages').addEventListener('click', loadMessages);
+    $('load-sightings').addEventListener('click', loadSightings);
+    $('load-discord').addEventListener('click', loadBootstrap);
+
+    async function loadBootstrap() {
+      try {
+        const res = await fetch('/astro/bootstrap');
+        const data = await res.json();
+        state.bootstrap = data;
+        $('bootstrap-json').textContent = JSON.stringify(data, null, 2);
+        $('connection-pill').textContent = data.discord.configured ? 'Discord configured' : 'Discord not configured';
+        $('stat-messages').textContent = data.health.astroMessages;
+        $('stat-astros').textContent = data.health.astros;
+        $('stat-sightings').textContent = data.health.sightings;
+        $('stat-discord').textContent = data.discord.configured ? 'ready' : 'missing';
+      } catch (error) {
+        setOutput(error.message || String(error), true);
+        $('connection-pill').textContent = 'Bootstrap failed';
+      }
+    }
+
+    async function postJson(url, payload, needsAuth = false) {
+      try {
+        const headers = { 'Content-Type': 'application/json' };
+        if (needsAuth) {
+          const token = state.adminToken || $('admin-token').value.trim();
+          if (!token) {
+            throw new Error('Admin token is required.');
+          }
+          headers.Authorization = `Bearer ${token}`;
+        }
+
+        const res = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify(payload),
+        });
+        const data = await res.json();
+        setOutput(JSON.stringify(data, null, 2), !res.ok);
+        await loadBootstrap();
+        return data;
+      } catch (error) {
+        setOutput(error.message || String(error), true);
+      }
+    }
+
+    async function loadMessages() {
+      try {
+        const res = await fetch('/astro/messages?limit=25&sort=desc');
+        const data = await res.json();
+        renderMessages(data.messages || []);
+        setOutput(JSON.stringify(data, null, 2));
+      } catch (error) {
+        setOutput(error.message || String(error), true);
+      }
+    }
+
+    async function loadSightings() {
+      try {
+        const res = await fetch('/astro/sightings');
+        const data = await res.json();
+        renderSightings(data.sightings || []);
+        setOutput(JSON.stringify(data, null, 2));
+      } catch (error) {
+        setOutput(error.message || String(error), true);
+      }
+    }
+
+    function renderMessages(messages) {
+      const root = $('messages');
+      root.innerHTML = messages.length ? '' : '<div class="muted">No messages loaded.</div>';
+      for (const message of messages) {
+        const div = document.createElement('article');
+        div.className = 'item';
+        div.innerHTML = `
+          <h3>${escapeHtml(message.author?.displayName || message.author?.username || 'Unknown')}</h3>
+          <div class="meta">${new Date(message.createdAt || message.createdTimestamp).toLocaleString()} · ${message.id}</div>
+          <div class="content">${escapeHtml(message.content || '(no content)')}</div>
+        `;
+        root.appendChild(div);
+      }
+    }
+
+    function renderSightings(sightings) {
+      const root = $('sightings');
+      root.innerHTML = sightings.length ? '' : '<div class="muted">No sightings loaded.</div>';
+      for (const sighting of sightings) {
+        const div = document.createElement('article');
+        div.className = 'item';
+        div.innerHTML = `
+          <h3>${escapeHtml(sighting.title || sighting.id || 'Untitled')}</h3>
+          <div class="meta">${escapeHtml(sighting.id || '')}</div>
+          <div class="content">${escapeHtml(sighting.notes || '')}</div>
+        `;
+        root.appendChild(div);
+      }
+    }
+
+    function setOutput(text, isError = false) {
+      const root = $('output');
+      root.textContent = text;
+      root.style.borderColor = isError ? 'rgba(255, 124, 138, 0.55)' : 'var(--border)';
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
+    }
+
+    loadBootstrap();
+    loadMessages();
+    loadSightings();
+  </script>
+</body>
+</html>
